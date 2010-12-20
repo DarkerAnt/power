@@ -1,0 +1,2 @@
+Format:
+K(connections)  Criticalities
