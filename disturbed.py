@@ -6,11 +6,13 @@ import networkx as nx
 import random
 import numpy
 
-Z_CRIT = 105 # crit point of node
-NF = 10 # load dumped onto neighbors when node goes crit
-LOAD_PDF = numpy.zeros(200)
+Z_CRIT = 1.0 # crit point of node
+NF = 0.0004 # initial incremented load on node of the network
+D_LOAD = 0.0001 # load dumped onto neighbors when node goes crit
+PDF_BINS = 0 
+LOAD_PDF = []
 CRIT_TIMES = [] # holds the (node,time) points when nodes go crit
- 
+
 
 def scatterPlot(points):
     if(len(points) == 0):
@@ -43,10 +45,11 @@ def setK(K, graph): # K = number of connections between each node
             else:
                 graph.add_edge(nodes[i],nodes[(i-k) + len(nodes)])
 
-def setWeights(weight, graph):
+def setUniformWeights(min_load, max_load, graph):
     nodes = graph.nodes(data=True)
     for name,data in nodes:
-        data['load'] = weight
+        data['load'] = random.uniform(min_load, max_load-0.000001)
+        data['running'] = True
     
 def listToPDF(list):
     arr = list[:]
@@ -94,10 +97,23 @@ def transferEvent(nodes,graph):
     transferLoad(n1,n2)
     return n2
 
+def addLoad(node):
+    name,data = node
+    data['load'] += D_LOAD
+
 def findAllCrits(nodes):
     crit_nodes = []
     for name,data in nodes:
         if(data['load'] > Z_CRIT):
+            crit_nodes.append((name,data))
+    if(len(crit_nodes) > 0):
+        return crit_nodes
+    return None
+
+def findRunningCrits(nodes):
+    crit_nodes = []
+    for name,data in nodes:
+        if(data['load'] > Z_CRIT and  data['running'] == True):
             crit_nodes.append((name,data))
     if(len(crit_nodes) > 0):
         return crit_nodes
@@ -110,19 +126,19 @@ def testCrit(graph):
     return None
 
 def unloadNode(crit_node, graph):
-    #print crit_node
     name,data = crit_node
-    transfer = NF
     nodes = graph.nodes(data=True)
     neighbors = graph.neighbors(name)
-    for i in range(transfer):
-        n2 = random.choice(neighbors)
-        transferLoad(crit_node, nodes[n2])
+    for n in neighbors:
+        name,data = nodes[n]
+        data['load'] += D_LOAD    
 
 def processCrits(time, nodes, graph):
     for node in nodes:
-        CRIT_TIMES.append((node[0],time))
+        #CRIT_TIMES.append((node[0],time))
         unloadNode(node,graph)
+        name,data = node
+        data['running'] = False
     
 def handleCrit(time, node, graph):
     CRIT_TIMES.append((node[0],time))
@@ -135,43 +151,55 @@ def handleSystemCrit(time, graph):
             break
         CRIT_TIMES.append((crit_node[0],time))
         unloadNode(crit_node,graph)
+
+def resetSim(min_load, max_load, graph):
+    setUniformWeights(min_load, max_load, graph)
+    LOAD_PDF = numpy.zeros(200)
+    CRIT_TIMES = []
         
 # assumes graph topology does not change
 def runSim(graph, iterations=100000):
     crit_events = 0
     crit_size = 0
     fout = open("temp_run.txt", 'a')
-    minute_mode = False
+    minute_mode = True # changed from false as we add to all nodes initially
     nodes = graph.nodes(data=True)
     for n in range(iterations):
-        if(minute_mode == False):
-            node = transferEvent(nodes,graph)
-            name,data = node
-            addLoadToPDF(0, graph)
-            if(data['load'] > Z_CRIT):
-                crit_events += 1
-                fout.write(str(n) + " " + str(crit_events) + '\n')
-                handleCrit(n, node, graph)
-                minute_mode = True
-        else:
-            crit_nodes = findAllCrits(nodes)
+        for node in nodes:
+            addLoad(node)               
+        while(minute_mode):
+            crit_nodes = findRunningCrits(nodes)
             if(crit_nodes == None):
                 minute_mode = False
             else:
-                crit_events += 1
+                crit_events += len(crit_nodes)
                 fout.write(str(n) + " " + str(crit_events) + '\n')
                 processCrits(n, crit_nodes, graph)
+                if(crit_events >= PDF_BINS):
+                    return PDF_BINS-1 
     return crit_events
 
 if __name__ == "__main__":
     random.seed()
     N = int(sys.argv[1])
     K = int(sys.argv[2])
-    Load = int(sys.argv[3])
+    Load = float(sys.argv[3])
+    PDF_BINS = N+1
+    LOAD_PDF = numpy.zeros(PDF_BINS)
     graph = nx.cycle_graph(N)
     setK(K,graph)
-    setWeights(Load,graph)
-    print runSim(graph)
+   
+    crit_pdf = numpy.zeros(PDF_BINS)
+    fout = open("crit_pdf.txt", 'w')
+    for i in range(100000):
+        resetSim(Load, Z_CRIT, graph)
+        #for node in graph.nodes_iter(data=True):
+        #    print node
+        #runSim(graph,1)
+        crit_pdf[runSim(graph,1)] += 1
+    for i in range(PDF_BINS):
+        fout.write(str(i) + " " + str(crit_pdf[i]) + '\n')
+    fout.close()
 
     #for k in range(2,20):
     #    graph = nx.cycle_graph(N)
