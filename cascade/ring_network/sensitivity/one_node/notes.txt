@@ -1,0 +1,9 @@
+The simulation creates a ring network of nodes. The number of connections
+each node has is sorted by folder. The uniform rv loading of each node is 
+indicated by the file name D_###. 
+The simulation then inserts a load NF on a random node and checks for any node
+failures d >= z_crit. That node is now in a failed state and passes NF load to
+all of the nodes its connected to. The nodes still active will then check
+their load and perform the same action. For each data set this simulation is
+run 10,000 times. The number of failures is then put into a histogram (the D_# files)
+

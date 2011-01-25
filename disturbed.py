@@ -5,10 +5,11 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import random
 import numpy
+import cdf_reader
 
 Z_CRIT = 1.0 # crit point of node
-NF = 0.0004 # initial incremented load on node of the network
-D_LOAD = 0.0001 # load dumped onto neighbors when node goes crit
+NF = 0.00001 # initial incremented load on node of the network
+D_LOAD = 0.0008 # load dumped onto neighbors when node goes crit
 PDF_BINS = 0 
 LOAD_PDF = []
 CRIT_TIMES = [] # holds the (node,time) points when nodes go crit
@@ -97,9 +98,9 @@ def transferEvent(nodes,graph):
     transferLoad(n1,n2)
     return n2
 
-def addLoad(node):
+def addLoad(node,load=D_LOAD):
     name,data = node
-    data['load'] += D_LOAD
+    data['load'] += load
 
 def findAllCrits(nodes):
     crit_nodes = []
@@ -130,7 +131,7 @@ def unloadNode(crit_node, graph):
     nodes = graph.nodes(data=True)
     neighbors = graph.neighbors(name)
     for n in neighbors:
-        name,data = nodes[n]
+        name,data = nodes[n] 
         data['load'] += D_LOAD    
 
 def processCrits(time, nodes, graph):
@@ -166,7 +167,7 @@ def runSim(graph, iterations=100000):
     nodes = graph.nodes(data=True)
     for n in range(iterations):
         for node in nodes:
-            addLoad(node)               
+            addLoad(node, NF)               
         while(minute_mode):
             crit_nodes = findRunningCrits(nodes)
             if(crit_nodes == None):
@@ -181,15 +182,20 @@ def runSim(graph, iterations=100000):
 
 if __name__ == "__main__":
     random.seed()
-    N = int(sys.argv[1])
-    K = int(sys.argv[2])
-    Load = float(sys.argv[3])
-    PDF_BINS = N+1
+    #N = int(sys.argv[1])
+    #K = int(sys.argv[2])
+    Load = float(sys.argv[1])
+    #graph = nx.cycle_graph(N)
+    #setK(K,graph)
+    graph = nx.Graph()
+    cdf_data = cdf_reader.Reader("ieee118cdf.txt")
+    cdf_data.startBusAtZero()
+    graph.add_nodes_from(cdf_data.buses)
+    graph.add_edges_from(cdf_data.branches)
+    PDF_BINS = len(graph.nodes())+1
     LOAD_PDF = numpy.zeros(PDF_BINS)
-    graph = nx.cycle_graph(N)
-    setK(K,graph)
-   
     crit_pdf = numpy.zeros(PDF_BINS)
+        
     fout = open("crit_pdf.txt", 'w')
     for i in range(100000):
         resetSim(Load, Z_CRIT, graph)

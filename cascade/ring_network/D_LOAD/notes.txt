@@ -1,0 +1,4 @@
+Changing the D_LOAD value: load distributed after a failure.
+nodes = 10
+connections = 4
+

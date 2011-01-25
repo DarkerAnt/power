@@ -1,0 +1,3 @@
+the difference between one_node and all_nodes is that the initial additional
+load is only added to one random node in one_node. For all_nodes the initial
+additional load is added to all of the nodes.

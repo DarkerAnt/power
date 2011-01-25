@@ -1,0 +1,5 @@
+nodes = 1000
+connections = 4
+z_crit = 1.0
+NF = 0.0004
+
