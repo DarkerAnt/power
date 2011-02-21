@@ -3,7 +3,7 @@
 import matplotlib.pyplot as plt
 import sys, os
 import numpy
-
+from scipy import stats
     
 
 colors = ['b','g','r','c','m','y','k']
@@ -18,8 +18,10 @@ data = numpy.genfromtxt(data_file)
 time_between_bins = [1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100]
 hist,bin_edges = numpy.histogram(data, bins=time_between_bins,normed=True)
 
+slope, intercept, r_value, p_value, std_err = stats.linregress(bin_edges[:-1], hist)
 print hist
 print bin_edges
+print slope
 plt.loglog(bin_edges[:-1], hist,'.', label=data_file)
 plt.legend()
 plt.show()
