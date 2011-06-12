@@ -26,6 +26,8 @@ class Reader:
         return self.data[:,column_nums]
     def exclude_on(self, data, excluding_cols):
         survivors = []
+        if len(excluding_cols) == 0:
+            return data
         for i in range(len(data)):
             keep = True
             for j in excluding_cols:
