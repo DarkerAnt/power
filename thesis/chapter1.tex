@@ -1,20 +1,86 @@
 \chapter{Motivation}
-The annual cost of blackouts in the United States is estimated to be \$80 billion.\cite{lacommare2004understanding} Limiting the cost of blackouts would be of great benefit to society. Each blackout event has a specific set of conditions and causes that result in a cascading failure. A single blackout event provides little information about the nature of future blackouts. Thus it is important to view blackouts not as random events, but as part of a larger dynamical system.\cite{carreras2004complex} 
+The annual cost of blackouts in the United States is estimated to be \$80 billion.\cite{lacommare2004understanding} Limiting the cost of blackouts would be of great benefit to society. Each blackout event has a specific set of conditions and causes that results in a cascading failure. A single blackout event provides little information about the nature of future blackouts. Thus it is important to view blackouts not as random events, but as part of a larger dynamical system.\cite{carreras2004complex} 
 
-\chapter{Blackouts}
-An electric power transmission system is designed to meet the demand for electricity with minimal disruption of service. Operators will go to great lengths to ensure high availability of the transmission system through design, management, and maintenance of the system. \cite{carreras2001evidence} However, the efforts to prevent small disturbances can increase the severity of large disturbances. [why?, cite]
+\chapter{Electrical Power Network}
+An electric power transmission system is designed to meet the demand for electricity with minimal disruption of service. Operators will go to great lengths to ensure high availability of the transmission system through design, management, and maintenance of the system.\cite{carreras2001evidence} If electrical power networks are complex systems as Carreras et. al suggests, then the systems inherit a "nonlinear coupling between the effect of mitigation and the freqency of occurence". Thus, the efforts to prevent small disturbances can increase the severity of large disturbances.\cite{newman2011exploring}
 
-When a component of the transmission system fails, the load on the component must be transferred to other parts of the network. As the system moves towards maximum operating capacity there exists fewer options to transfer load away from a local disturbance. When there are no available options to transfer the excess load then a cascading failure can occur. If a component fails and its neighboring components are unable to handle the additional load then the neighboring components will also fail. The load transferred from these failed components can cause additional neighboring components to fail. With each additional failure the network becomes less resilient to failure [cite]. In this manner a single failure can cascade into a system wide disruption of service. 
+\section{Cascading Failure}
+A cascading failure on an electrical power transmission system occurs when a component fails and other components on the network are unable to absorb the disruption caused by the failure. Those components unable to handle the disruption also fail leading to a widening of the disruption on the network. With fewer components available to absorb the effects of the growing disruption the entire network becomes less resilient to failures, increasing the scale of the disruption. The cascade ends when the effects of the disruption can no longer be transmitted through the remaining components on the network. (disturbance to disruption, no mention of blackouts == cascades)
 
+\section{Current Blackout Prevention}
+The current blackout prevention method practiced by industry is N-x contingency analysis. N-1 contingency analysis ensures that no single initiating outage will result in a cascading blackout. The N-1 contingency does not assess the possibility of cascading failures caused by multiple, unrelated events. In practice the N-1 contingency is computed for each balancing authority individually and does not extend to the interconnects between BAs. The Northeast Blackout of 2003 involved multiple contingencies prior to cascading. This suggests a higher order than N-1 is required to prevent such occurrences.\cite{baldick2009vulnerability, liscouski2004final} The number of contingencies that must be computed for an N-x contingency analysis is exponential in x and has a large constant running time. A 150,000 element N-2 contingency analysis computed on 512 processors took 25.8 hours.\cite{huang2009massive}
 
 \chapter{Previous Work}
-After compiling the North American Electrical Reliability Council (NERC) reports Carreras et al. found evidence suggesting electrical power networks are self organizing critical systems and exhibit a power tail.\cite{carreras2000initial, carreras2001evidence} The CASCADE \cite{dobson2002examining} model was devised to provide a high level probabilistic view of power network load transferring mechanics. The OPA \cite{dobson2001initial, carreras2004complex, newman2011exploring} \footnote{Oak Ridge National Laboratory, Power Systems Engineering Research Center at the University of Wisconsin, University of Alaska} model was created to examine the complex dynamics believed to be found in power networks. OPA uses two timescales to model changes in network capacity and cascading overloads. The Monte Carlo based Manchester model examines power networks at a more detailed level. The model includes a variety of AC dynamics not found in OPA such as generator instability and re-dispatch of active and reactive resources.\cite{nedic2006criticality, baldick2009vulnerability} 
+\section{Self-Organized Criticality}
+dynamical system
+Per Bak \& sandpile model
 
-\chapter{Current Methods}
-The current blackout prevention method practiced by industry is N-x contingency analysis. N-1 contingency analysis ensures that no single initiating outage will result in a cascading blackout. The N-1 contingency does not asses the possibility of cascading failures caused by multiple, unrelated events. In practice the N-1 contingency is computed for each balancing authority individually and does not extend to the interconnects between BAs. The Northeast Blackout of 2003 involved multiple contingencies prior to cascading. This suggests a higher order than N-1 is required to prevent such occurrences.\cite{baldick2009vulnerability, liscouski2004final} The number of contingencies that must be computed for an N-x contingency analysis is exponential in x and has a large constant running time. An 150,000 element N-2 contingency analysis computed on 512 processors took 25.8 hours.\cite{huang2009massive} The current industry tool used to identify cascading failures is TRELSS\footnote{Transmission Reliabilty Evaluation of Large-Scale Systems} blah blah blah TRELSS.
+\section{Evidence of Self-Organized Criticality in Electrical Power Networks}
+After compiling the North American Electrical Reliability Council (NERC) reports Carreras et al. found evidence suggesting electrical power networks are self-organizing critical systems and e x h i b i t a power tail.\cite{carreras2000initial, carreras2001evidence} Self-organizing critical systems were originally described by Bak et. al in the seminal paper "Self-organized criticality: an explanation of 1/f noise". The paper describes how multidimensional dynamical systems naturally evolve towards an attractor located at a critical state.\cite{bak1987self} A number of models were devised to explore the self-organizing critical behavior exhibited by electrical power networks. The CASCADE \cite{dobson2002examining} model was devised to provide a high level probabilistic view of power network load transferring mechanics. The OPA \cite{dobson2001initial, carreras2004complex, newman2011exploring} \footnote{Oak Ridge National Laboratory, Power Systems Engineering Research Center at the University of Wisconsin, University of Alaska} model was created to examine the complex dynamics believed to be found in power networks. OPA uses two timescales to model changes in network capacity and cascading overloads. The Monte Carlo based Manchester model examines power networks at a more detailed level. The model includes a variety of AC dynamics not found in OPA such as generator instability and re-dispatch of active and reactive resources.\cite{nedic2006criticality, baldick2009vulnerability} 
 
 
-\chapter{CASCADE Model}
 
-\chapter{OPA Model}
+ The current industry tool used to identify cascading failures is TRELSS\footnote{Transmission Reliabilty Evaluation of Large-Scale Systems} blah blah blah TRELSS.
+
+
+\section{CASCADE Model}
+
+\section{OPA Model}
 The OPA model uses a slow and fast timescale to model power networks.\cite{carreras2004complex} The slow timescale models the growth of demand, increased generator capacity in response to demand, and increased line capacity in response to blackouts. The fast timescale uses linear programming to solve the dc power flow of a network and captures the fast dynamics such as cascading overloads and outages.\cite{carreras2004complex}
+
+\chapter{Power Flow}
+\section{AC Power Flow}
+Net complex power injected into a bus k: \\
+\begin{eqnarray} 
+S_k &=& V_kI^{*}_{k} \\ 
+I_k &=& \sum_{j=1}^N Y_{kj}V_j \nonumber \\
+S_k &=& V_k(\sum_{j=1}^NY_{kj}V_j)^* \nonumber\\
+S_k &=& V_k ( \sum_{j=1}^NY^*_{kj}V^*_j )
+\end{eqnarray}
+Admittance: \begin{equation} Y_{kj}=G_{kj}+jB_{kj} \end{equation} \\
+\begin{eqnarray}
+S_k = V_k \sum_{j=1}^NY^*_{kj}V^*_j &=& |V_k| \angle \theta_k \sum_{j=1}^N (G_{kj} + jB_{kj})^*(|V_j|\angle \theta_j)^* \\
+    &=& |V_k| \angle \theta_k \sum_{j=1}^N (G_{kj} - jB_{kj})(|V_j|\angle -\theta_j) \\ 
+    &=& \sum_{j=1}^N |V_k| \angle \theta_k (|V_j|\angle-\theta)(G_{kj}-jB_{kj}) \\
+    &=& \sum_{j=1}^N (|V_k||V_j|\angle(\theta_k-\theta_j))(G_{kj}-jB_{kj})
+\end{eqnarray}\\
+\begin{eqnarray}
+V=|V|\angle \theta = |V|(cos\theta + jsin\theta) \\
+S_k &=& \sum_{j=1}^N(|V_k||V_j|\angle(\theta_k-\theta_j))(G_{kj} - jB_{kj}) \\
+    &=& \sum_{j=1}^N|V_k||V_j|[cos(\theta_k-\theta_j) + jsin(\theta_k-\theta_j)](G_{jk} - jB_{kj})
+\end{eqnarray}
+\begin{eqnarray}
+S_k = P_k + Q_k \\
+P_k &=& \sum_{j=1}^N|V_k||V_j|[G_{kj}cos(\theta_k-\theta_j)+B_{kj}sin(\theta_k-\theta_j)] \\
+Q_k &=& \sum_{j=1}^N|V_k||V_j|[G_{kj}sin(\theta_k-\theta_j)-B_{kj}cos(\theta_k-\theta_j)]
+\end{eqnarray}
+
+\section{DC Power Flow}
+Two simplifications of the AC Power Flow model will allow for a linearization of the problem.
+\begin{enumerate}
+\item The resistance is much smaller than the reactance. \label{dc_simp:resistance}
+\item The difference between $\theta_k$ and $\theta_j$ is very small. \label{dc_simp:angle}
+\end{enumerate}
+
+We start with the AC Power Flow equations
+\begin{eqnarray}
+P_k &=& \sum_{j=1}^N|V_k||V_j|[G_{kj}cos(\theta_k-\theta_j)+B_{kj}sin(\theta_k-\theta_j)] \\
+Q_k &=& \sum_{j=1}^N|V_k||V_j|[G_{kj}sin(\theta_k-\theta_j)-B_{kj}cos(\theta_k-\theta_j)]
+\end{eqnarray}
+
+\begin{eqnarray}
+\frac{1}{y} &=& z =r+jx \\
+y &=& \frac{1}{r+jx} = g+jb \\
+g &=& \frac{r}{r^2+x^2} \\
+b &=& \frac{-x}{r^2+x^2}
+\end{eqnarray}
+From simplification (\ref{dc_simp:resistance}) we can assume $g \approx 0$ and $b \approx \frac{-1}{x}$ if $r << x$.
+
+\begin{eqnarray}
+P_k &=& \sum_{j=1}^N|V_k||V_j|(B_{kj}(\theta_k-\theta_j)) \\
+Q_k &=& -|V_k|^2b_k+\sum_{j=1}^N|V_k||b_{kj}|(|V_k|-|V_j|) \\
+|V_k||V_j| \approx 1 \\
+P_k &=& \sum_{j=1, j \neq k}^NB_{kj}(\theta_k - \theta_j) \\
+Q_k &=& \sum_{j=1}^N -B_{kj} \\
+\end{eqnarray}
+Somehow that $Q_k$ term was supposed to go away. The paper I'm pulling this from just hand waves it as $P_{kj} >> Q_{kj}$. Maybe I'm reading it wrong. It's late, I'm tired. Goodnight $\ddot\smile$
