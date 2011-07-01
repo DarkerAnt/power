@@ -30,57 +30,87 @@ The OPA model uses a slow and fast timescale to model power networks.\cite{carre
 
 \chapter{Power Flow}
 \section{AC Power Flow}
-Net complex power injected into a bus k: \\
+Have a pi-model figure\ldots later $\ddot\smile$\\
+The transmission line $\pi-$model: \\
+Admittance: $y_{km} = \frac{1}{z_{km}} = g_{km} + jb_{km}$ \\
+Series Conductance: $g_{km}=\frac{r_{km}}{r^2_{km}+x^2_{km}}$ \\
+Series Susceptance: $b_{km}=\frac{x_{km}}{r^2_{km}+x^2_{km}}$ \\
+Voltage at bus k: $E_k = V_ke^{j\theta_k}$ \\
+Voltage at bus m: $E_m = V_me^{j\theta_m}$ \\
+\\
+The shunt series conductance $g^{sh}_{km} \approx 0$. Thus the complex current leaving bus k and entering bus m is: 
+\begin{equation} I_{km}=y_{km}(E_k-E_m) + jb^{sh}_{km}E_k \end{equation}
+Complex power injected from bus k to bus m:
+\begin{eqnarray}
+S_{km} &=& E_kI^{*}_{km} \\
+      &=& E_k(y_{km}(E_k-E_m)+jb^{sh}_{km}E_k)^* \nonumber \\
+      &=& V_ke^{j\theta_k}(y^*_{km}(V_ke^{-j\theta_k}-V_me^{-j\theta_m})-jb^{sh}_{km}V_ke{-j\theta_k} \nonumber \\
+      &=& (g_{km}-jb_{km})(V_k^2-V_ke^{j\theta_k}U_me^{-j\theta_m})-jb^{sh}_{km}V^2_k \nonumber \\
+      &=& g_{km}V^2_k-g_{km}V_ke^{j\theta_k}V_me^{-j\theta_m}-jV^2_kb_{km}+jV_ke^{j\theta_k}V_me^{-j\theta_m}b_{km}-jV^2_kb^{sh}_{km} \nonumber \\
+      &=& V^2_kg_{km}-V_kV_mg_{km}e^{j(\theta_k - \theta_m)}-jV^2_kb_{km}+jV_kV_mb_{km}e^{j(\theta_k-\theta_m)}-jV^2_kb^{sh}_{km} \nonumber 
+\end{eqnarray}
+Let $\theta_{km}=\theta_k-\theta_m$.
+\begin{equation}
+S_{km} = V^2_kg_{km}-V_kV_mg_{km}(cos\theta_{km}+jsin\theta_{km})-jV^2_kb_{km}+V_kV_mb_{km}(cos\theta_{km}+jsin\theta_{km})- jV^2_kb^{sh}_{km} \nonumber 
+\end{equation}
+Let $P_{km}$ be the active power flow and and $Q_{km}$ be the reactive power flow through $S_{km}$.
 \begin{eqnarray} 
-S_k &=& V_kI^{*}_{k} \\ 
-I_k &=& \sum_{j=1}^N Y_{kj}V_j \nonumber \\
-S_k &=& V_k(\sum_{j=1}^NY_{kj}V_j)^* \nonumber\\
-S_k &=& V_k ( \sum_{j=1}^NY^*_{kj}V^*_j )
-\end{eqnarray}
-Admittance: \begin{equation} Y_{kj}=G_{kj}+jB_{kj} \end{equation} \\
+&S_{km}&  = P_{km}+jQ_{km} \\
+&P_{km}&  = V^2_kg_{km}-V_kV_mg_{km}cos\theta_{km}-V_kV_mb_{km}sin\theta_{km} \label{ac_power_flow:active} \\
+&jQ_{km}& = -V^2_k(b_{km}+b^{sh}_{km})+V_kV_mb_{km}cos\theta_{km}-V_kV_mg_{km}sin\theta_{km} \label{ac_power_flow:reactive}
+\end{eqnarray} 
+The net complex power injected at bus k:
 \begin{eqnarray}
-S_k = V_k \sum_{j=1}^NY^*_{kj}V^*_j &=& |V_k| \angle \theta_k \sum_{j=1}^N (G_{kj} + jB_{kj})^*(|V_j|\angle \theta_j)^* \\
-    &=& |V_k| \angle \theta_k \sum_{j=1}^N (G_{kj} - jB_{kj})(|V_j|\angle -\theta_j) \\ 
-    &=& \sum_{j=1}^N |V_k| \angle \theta_k (|V_j|\angle-\theta)(G_{kj}-jB_{kj}) \\
-    &=& \sum_{j=1}^N (|V_k||V_j|\angle(\theta_k-\theta_j))(G_{kj}-jB_{kj})
-\end{eqnarray}\\
-\begin{eqnarray}
-V=|V|\angle \theta = |V|(cos\theta + jsin\theta) \\
-S_k &=& \sum_{j=1}^N(|V_k||V_j|\angle(\theta_k-\theta_j))(G_{kj} - jB_{kj}) \\
-    &=& \sum_{j=1}^N|V_k||V_j|[cos(\theta_k-\theta_j) + jsin(\theta_k-\theta_j)](G_{jk} - jB_{kj})
-\end{eqnarray}
-\begin{eqnarray}
-S_k = P_k + Q_k \\
-P_k &=& \sum_{j=1}^N|V_k||V_j|[G_{kj}cos(\theta_k-\theta_j)+B_{kj}sin(\theta_k-\theta_j)] \\
-Q_k &=& \sum_{j=1}^N|V_k||V_j|[G_{kj}sin(\theta_k-\theta_j)-B_{kj}cos(\theta_k-\theta_j)]
+&S_k& = P_k + jQ_k = E_kI^*_k \\
+&S_k& = V_ke^{j\theta_k}\sum_{m\in K}(G_{km}-jB_{km})(V_me^{-j\theta_m}) \\
+&P_k& = V_k\sum_{m\in K}V_m(G_{km}cos\theta_{km}+B_{km}sin\theta_{km}) \\
+&jQ_k& = V_k\sum_{m\in K}V_m(G_{km}sin\theta_{km}-B_{km}cos\theta_{km})
 \end{eqnarray}
 
 \section{DC Power Flow}
-Two simplifications of the AC Power Flow model will allow for a linearization of the problem.
-\begin{enumerate}
-\item The resistance is much smaller than the reactance. \label{dc_simp:resistance}
-\item The difference between $\theta_k$ and $\theta_j$ is very small. \label{dc_simp:angle}
-\end{enumerate}
-
-We start with the AC Power Flow equations
+The DC power flow linearizes the nonlinear AC power flow equations allowing for faster computation of power flow on a network. It relates bus angle voltage to active power flow. \\
+We'll start with the AC power flow equations (\ref{ac_power_flow:active}) and (\ref{ac_power_flow:reactive}) (and never mention reactance again):
 \begin{eqnarray}
-P_k &=& \sum_{j=1}^N|V_k||V_j|[G_{kj}cos(\theta_k-\theta_j)+B_{kj}sin(\theta_k-\theta_j)] \\
-Q_k &=& \sum_{j=1}^N|V_k||V_j|[G_{kj}sin(\theta_k-\theta_j)-B_{kj}cos(\theta_k-\theta_j)]
+&P_{km}&  = V^2_kg_{km}-V_kV_mg_{km}cos\theta_{km}-V_kV_mb_{km}sin\theta_{km} \nonumber \\
+&jQ_{km}& = -V^2_k(b_{km}+b^{sh}_{km})+V_kV_mb_{km}cos\theta_{km}-V_kV_mg_{km}sin\theta_{km} \nonumber
 \end{eqnarray}
 
-\begin{eqnarray}
-\frac{1}{y} &=& z =r+jx \\
-y &=& \frac{1}{r+jx} = g+jb \\
-g &=& \frac{r}{r^2+x^2} \\
-b &=& \frac{-x}{r^2+x^2}
-\end{eqnarray}
-From simplification (\ref{dc_simp:resistance}) we can assume $g \approx 0$ and $b \approx \frac{-1}{x}$ if $r << x$.
+The active power injected at bus m is:
+\begin{equation}
+P_{mk} = V^2g_{km}-V_kV_mg_{km}cos\theta_{km}+V_kV_mb_{km}sin\theta_{km}
+\end{equation}
+The active power loss through the transmission line using the $\pi-$model:
+\begin{equation}
+P_{km}+P_{mk} = g_{km}(V^2_k+V^2_m-2V_kV_mcos\theta_{km})
+\end{equation} 
 
+If we ignore the terms governing active power loss then we have:
 \begin{eqnarray}
-P_k &=& \sum_{j=1}^N|V_k||V_j|(B_{kj}(\theta_k-\theta_j)) \\
-Q_k &=& -|V_k|^2b_k+\sum_{j=1}^N|V_k||b_{kj}|(|V_k|-|V_j|) \\
-|V_k||V_j| \approx 1 \\
-P_k &=& \sum_{j=1, j \neq k}^NB_{kj}(\theta_k - \theta_j) \\
-Q_k &=& \sum_{j=1}^N -B_{kj} \\
+&P_{km}& = -P_{mk} = -V_kV_mb_{km}sin\theta_{km} \\
+&P_{km}& = \frac{V_kV_msin\theta_{km}}{x_{km}}
 \end{eqnarray}
-Somehow that $Q_k$ term was supposed to go away. The paper I'm pulling this from just hand waves it as $P_{kj} >> Q_{kj}$. Maybe I'm reading it wrong. It's late, I'm tired. Goodnight $\ddot\smile$
+
+I should mention taking the 1st order tailor series somewhere\ldots \\
+During light loading conditions we can assume:
+\begin{eqnarray}
+V_k \approx V_m \approx 1 p.u. \\
+sin\theta_{km} \approx \theta_{km}
+\end{eqnarray}
+
+How do I make p.u. normal text in the equation above? \\
+
+Since $b_{km}=\frac{-1}{x_{km}}$
+\begin{eqnarray}
+P_{km} = \frac{\theta_{km}}{x_{km}} \\
+P_{km} = \frac{\theta_k-\theta_m}{x_{km}} \\
+x_{km}P_{km}+\theta_m-\theta_k = 0
+\end{eqnarray}
+
+This linearization of the power flow problem is analogous to Ohm's Law where \\
+$\theta_k$, $\theta_m$ are the dc voltages at the resistor terminals \\
+$x_{km}$ is the resistor \\
+$P_{km}$ is the dc current through $x_{km}$ \\
+
+A wonderful set of pictures with the $\pi-$model next to the DC power flow model here.
+
+For more information cite relevant paper I stole the derivation and chunks of text from.
