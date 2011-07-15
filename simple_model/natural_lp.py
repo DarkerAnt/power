@@ -5,6 +5,9 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import numpy as np
 
+node_index = []
+edge_index = []
+
 def display_graph(graph, edge_width=2):
     nodes = graph.nodes(data=True)
     edges = graph.edges(data=True)
@@ -20,11 +23,9 @@ def display_graph(graph, edge_width=2):
         if cap > max_cap:
             max_cap = cap
     width_mod = edge_width/(1.0*max_cap)
-    print width_mod
     for i in range(len(edgecapwidth)):
         edgecapwidth[i] *= width_mod
         edgeloadwidth[i]*= width_mod
-    print "edgecapwidth",edgecapwidth
         
     #labels = [str(d['load']) + '/' + str(d['capacity']) for u,v,d in edges]
     labels = [str(abs(d['load'])) + '/' + str(d['capacity']) for u,v,d in edges]
@@ -39,12 +40,14 @@ def display_graph(graph, edge_width=2):
     plt.show()
     
 def init_graph():
+    global node_index, edge_index
     #graph = nx.generators.classic.grid_2d_graph(2, 2)
     #graph = graph.to_directed()
     graph = nx.DiGraph()
     #graph.add_edges_from([('A','B'),('B','C'),('C','A')])
     #graph.add_edges_from([('A','B'),('B','C'),('C','D'),('D','A')])
     graph.add_edges_from([('A','B'),('A','C'),('B','D'),('C','E'),('D','E'),('D','F'),('E','G')])
+    #graph.add_edges_from([('1','2'),('2','4'),('1','3'),('3','5')])
     nodes = graph.nodes(data=True)
     edges = graph.edges(data=True)
     
@@ -64,9 +67,23 @@ def init_graph():
     graph.edge['D']['F']['capacity'] = 100
     graph.edge['E']['G']['capacity'] = 100
 
+    #graph.node['1']['load'] = 30
+    #graph.node['2']['load'] = 0
+    #graph.node['3']['load'] = 0
+    #graph.node['4']['load'] = -20
+    #graph.node['5']['load'] = -10
+
+    #graph.edge['1']['2']['capacity'] = 20
+    #graph.edge['1']['3']['capacity'] = 10
+    #graph.edge['2']['4']['capacity'] = 20
+    #graph.edge['3']['5']['capacity'] = 10
+
     for u,v,d in edges:
         d['load'] = 0
     
+    node_index = dict(zip(graph.nodes(), range(len(nodes))))
+    edge_index = dict(zip(graph.edges(), range(len(edges))))
+
     #for (name,data) in nodes:
     #    data['load'] = 0
     #name,data = nodes[0]
@@ -83,16 +100,10 @@ def init_graph():
     #data['load'] = 1.5
     return graph
 
-if __name__ == "__main__":
-   
-    graph = init_graph()
+def solve_network_flow(graph):
+    global edge_index, node_index
     nodes = graph.nodes(data=True)
     edges = graph.edges(data=True)
-    #lp = lpsolve('make_lp', 0, len(edges))
-
-    # use adj list
-    edge_index = dict(zip(graph.edges(), range(len(edges))))
-    node_index = dict(zip(graph.nodes(), range(len(nodes))))
     print "edge index:", edge_index
     
     num_source_sink = 0
@@ -100,22 +111,23 @@ if __name__ == "__main__":
         if data['load'] != 0:
             num_source_sink += 1
         
-    con_matrix = np.zeros((len(nodes), len(edges)+num_source_sink))
+    con_matrix = np.zeros((len(nodes)+len(edges), len(edges)+num_source_sink+len(nodes)))
     for u,v,d in edges:
         j = edge_index[(u,v)]
         iu = node_index[u]
         iv = node_index[v]
         con_matrix[iu,j] = 1
-        con_matrix[iv,j] = -1
+        con_matrix[iv,j] = -1    
     
-    
+    # line capacities (upper and lower bounds)
     source_weight = 5
     sink_weight = -100
     #bus_weight = 0
-    lp = lpsolve('make_lp', 0, len(edges)+num_source_sink)
-    objfn = np.ones(len(edges)+num_source_sink)
-    upbounds = np.zeros(len(edges)+num_source_sink)
-    lobounds = np.zeros(len(edges)+num_source_sink)
+    line_resistance = 1
+    lp = lpsolve('make_lp', 0, len(edges)+num_source_sink+len(nodes))
+    objfn = np.zeros(len(edges)+num_source_sink+len(nodes))
+    upbounds = np.zeros(len(edges)+num_source_sink+len(nodes))
+    lobounds = np.zeros(len(edges)+num_source_sink+len(nodes))
     j = len(edges)
     for name,data in nodes:
         i = node_index[name]
@@ -125,84 +137,53 @@ if __name__ == "__main__":
             upbounds[j] = load
             lobounds[j] = 0
             objfn[j] = source_weight
+            edge_index[(None,name)] = j
             j += 1
         elif load < 0:
             con_matrix[i,j] = 1
             upbounds[j] = -load
             lobounds[j] = 0
-            #upbounds[j] = 0
-            #lobounds[j] = load
             objfn[j] = sink_weight
+            edge_index[(name, None)] = j
             j += 1
+    # set up power angle constraints
+    pow_angle_offset = j
+    i = len(nodes)
+    for u,v,d in edges:
+        ju = node_index[u] + pow_angle_offset
+        jv = node_index[v] + pow_angle_offset
+        je = edge_index[(u,v)]
+        con_matrix[i,ju] = 1
+        con_matrix[i,jv] = -1
+        con_matrix[i,je] = -line_resistance
+        i += 1
+    # set bounds to be line capacities
     for u,v,d in edges:
         i = edge_index[(u,v)]
         cap = d['capacity']
         upbounds[i] = cap
         lobounds[i] = -cap
-    
+    for i in range(len(edges)+num_source_sink,len(upbounds)):
+        upbounds[i] = Infinite
+        lobounds[i] = -Infinite
+      
     # node constraints
     for name,data in nodes:
         i = node_index[name]
         print name
         lpsolve('add_constraint', lp, con_matrix[i], EQ, 0)
         print "constraint:", con_matrix[i], "=", 0
-
-    # source/sink constraints
-    #for name,data in nodes:
-    #    i = node_index[name]
-    #    load = data['load']
-    #    print name
-    #    if load > 0: # source
-    #        lpsolve('add_constraint', lp, con_matrix[i], LE, load)
-    #        print "constraint:", con_matrix[i], "<=", load
-    #        lpsolve('add_constraint', lp, con_matrix[i], GE, 0)
-    #        print "constraint:", con_matrix[i], ">=", 0
-    #    elif load < 0: # sink
-    #        lpsolve('add_constraint', lp, con_matrix[i], GE, load)
-    #        print "constraint:", con_matrix[i], ">=", load
-    #        lpsolve('add_constraint', lp, con_matrix[i], LE, 0)
-    #        print "constraint:", con_matrix[i], "<=", 0
-    #    else:
-    #        lpsolve('add_constraint', lp, con_matrix[i], EQ, 0)
-    #        print "constraint:", con_matrix[i], "=", load
-
-    # objective function
-    #source_weight = 5
-    #sink_weight = -100
-    #bus_weight = 0
-    #objfn = np.zeros(len(edges))
-    #for u,v,d in edges:
-    #    i = edge_index[(u,v)]
-    #    uload = graph.node[u]['load']
-    #    vload = graph.node[v]['load']
-    #    if uload == 0 and vload == 0:
-    #        objfn[i] += bus_weight
-    #    else:
-    #        if uload > 0:
-    #            objfn[i] += source_weight
-    #        elif uload < 0:
-    #            objfn[i] -= sink_weight
-    #        if vload > 0:
-    #            objfn[i] -= source_weight
-    #        elif vload < 0:
-    #            objfn[i] += sink_weight
+    # power angle constraints
+    for i in range(len(nodes), len(nodes)+len(edges)):
+        lpsolve('add_constraint', lp, con_matrix[i], EQ, 0)
+        print "constraint:", con_matrix[i], "=", 0
         
-    
     print "objective func:", objfn
     lpsolve('set_verbose', lp, IMPORTANT)
     lpsolve('set_minim', lp)
     lpsolve('set_obj_fn', lp, objfn)
     lpsolve('set_upbo', lp, upbounds)
     lpsolve('set_lowbo', lp, lobounds)
-    # set var upper and lower bounds
-    #bounds = np.zeros(len(edges))
-    #for u,v,d in edges:
-    #    i = edge_index[(u,v)]
-    #    bounds[i] = d['capacity']
-    #lpsolve('set_upbo', lp, bounds)
-    #lpsolve('set_lowbo', lp, -bounds)
-    #lpsolve('set_mat', lp, adjmatrix)
-    #lpsolve('set_rh_vec', lp, init_loads)
     lpsolve('set_outputfile', lp, "")
     lpsolve('print_lp',lp)
     result = lpsolve('solve',lp)
@@ -216,5 +197,41 @@ if __name__ == "__main__":
         #    d['load'] = solution[i]
         #else:
         #    d['load'] = solution
-    lpsolve('delete_lp',lp)
+    #lpsolve('delete_lp',lp)
+    return lp
+
+
+# checks: theta_i - theta_j = x_ij * p_ij
+# for all power angles theta, resistance x, and power p
+# analogous to V=RI
+def test_feasibility(graph):
+    global node_index, edge_index
+    edges = graph.edges(data=True)
+    a = np.zeros((len(graph.edge), len(graph.node)))
+    b = np.zeros(len(graph.edge))
+    for u,v,d in edges:
+        i = edge_index[(u,v)]
+        ju = node_index[u]
+        jv =  node_index[v]
+        a[i,ju] = 1
+        a[i,jv] = -1
+        b[i] = d['load']
+    
+    x = np.linalg.lstsq(a,b)
+    feasible = True
+    dot_prod = np.dot(a,x[0])
+    for u,v,d in edges:
+        i = edge_index[(u,v)]
+        if round(dot_prod[i],3) != round(b[i],3):
+            feasible = False
+        print u, '==>', v, dot_prod[i], b[i] 
+    return feasible
+if __name__ == "__main__":
+    graph = init_graph()
+    lp = solve_network_flow(graph)
+    feasible = test_feasibility(graph)
+    if feasible:
+        print "Solution Feasible"
+    else:
+        print "Solution Infeasible"
     display_graph(graph)
