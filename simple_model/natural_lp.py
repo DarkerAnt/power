@@ -28,7 +28,7 @@ def display_graph(graph, edge_width=2):
         edgeloadwidth[i]*= width_mod
         
     #labels = [str(d['load']) + '/' + str(d['capacity']) for u,v,d in edges]
-    labels = [str(abs(d['load'])) + '/' + str(d['capacity']) for u,v,d in edges]
+    labels = [str(abs(round(d['load'],3))) + '/' + str(d['capacity']) for u,v,d in edges]
     e_labels=dict(zip(graph.edges(), labels))
     pos = nx.spring_layout(graph)
     nx.draw_networkx_nodes(graph, pos, node_size=300)
@@ -48,6 +48,7 @@ def init_graph():
     #graph.add_edges_from([('A','B'),('B','C'),('C','D'),('D','A')])
     graph.add_edges_from([('A','B'),('A','C'),('B','D'),('C','E'),('D','E'),('D','F'),('E','G')])
     #graph.add_edges_from([('1','2'),('2','4'),('1','3'),('3','5')])
+    #graph.add_edges_from([('1','3'),('1','4'),('2','3'),('2','4')])
     nodes = graph.nodes(data=True)
     edges = graph.edges(data=True)
     
@@ -78,6 +79,16 @@ def init_graph():
     #graph.edge['2']['4']['capacity'] = 20
     #graph.edge['3']['5']['capacity'] = 10
 
+    #graph.node['1']['load'] = 100
+    #graph.node['2']['load'] = 50
+    #graph.node['3']['load'] = -50
+    #graph.node['4']['load'] = -50
+
+    #graph.edge['1']['3']['capacity'] = 50
+    #graph.edge['1']['4']['capacity'] = 30
+    #graph.edge['2']['3']['capacity'] = 25
+    #graph.edge['2']['4']['capacity'] = 10
+
     for u,v,d in edges:
         d['load'] = 0
     
@@ -101,6 +112,13 @@ def init_graph():
     return graph
 
 def solve_network_flow(graph):
+    source_cost = 5
+    sink_cost = -100
+    #line_weight = 0
+    cap_increase_cost = 90
+    cap_increase = 5
+    line_resistance = 1 # i bet i can fix this by throwing it into a capacity form instead
+
     global edge_index, node_index
     nodes = graph.nodes(data=True)
     edges = graph.edges(data=True)
@@ -110,62 +128,124 @@ def solve_network_flow(graph):
     for name,data in nodes:
         if data['load'] != 0:
             num_source_sink += 1
-        
-    con_matrix = np.zeros((len(nodes)+len(edges), len(edges)+num_source_sink+len(nodes)))
+
+    # con_matrix format: con_matrix[node, var]
+    #                    len(edges)  + num_source_sink +     len(edges)          +       len(edges)        +  len(nodes)
+    # |             | power line use | source/sink use | cap increase(pos going) | cap increase(neg going) | power angles |
+    # | node1       |        1               1                   i                           i                    0          = 0
+    # | node2       |        1               1                   i                           i                    0          = 0
+    # | node3       |        1               1                   i                           i                    0          = 0
+    # | node_angle1 |        1               1                   i                           i                   -r          = 0
+    # | node_angle2 |        1               1                   i                           i                   -r          = 0
+    # | node_angle3 |        1               1                   i                           i                   -r          = 0
+    cap_increase_start = len(edges) + num_source_sink
+    var_len = len(edges) + num_source_sink + len(edges) + len(edges) + len(nodes)
+    lp = lpsolve('make_lp', 0, var_len)
+    con_matrix = np.zeros((len(nodes)+len(edges), var_len))
+    objfn = np.zeros(var_len)
+    upbounds = np.zeros(var_len)
+    lobounds = np.zeros(var_len)
+    
+    start = 0
+    stop = len(edges) 
+    line_power_vars = con_matrix[:,start:stop]
+    line_power_objfn = objfn[start:stop]
+    line_power_upbounds = upbounds[start:stop]
+    line_power_lobounds = lobounds[start:stop]
+
+    start = stop
+    stop = start + num_source_sink
+    source_sink_vars = con_matrix[:,start:stop]
+    source_sink_objfn = objfn[start:stop]
+    source_sink_upbounds = upbounds[start:stop]
+    source_sink_lobounds = lobounds[start:stop]
+
+    start = stop
+    stop = start + len(edges)
+    cap_increase_pos_vars = con_matrix[:,start:stop]
+    cap_increase_pos_objfn = objfn[start:stop]
+    cap_increase_pos_upbounds = upbounds[start:stop]
+    cap_increase_pos_lobounds = lobounds[start:stop]
+
+    start = stop
+    stop = start + len(edges)
+    cap_increase_neg_vars = con_matrix[:,start:stop]
+    cap_increase_neg_objfn = objfn[start:stop]
+    cap_increase_neg_upbounds = upbounds[start:stop]
+    cap_increase_neg_lobounds = lobounds[start:stop]
+
+    start = stop
+    stop = start + len(nodes)
+    pow_angle_vars = con_matrix[:,start:stop]
+    pow_angle_objfn = objfn[start:stop]
+    pow_angle_upbounds = upbounds[start:stop]
+    pow_angle_lobounds = lobounds[start:stop]
+    
+    # line_power and cap_increase
     for u,v,d in edges:
+        cap = d['capacity']
         j = edge_index[(u,v)]
         iu = node_index[u]
         iv = node_index[v]
-        con_matrix[iu,j] = 1
-        con_matrix[iv,j] = -1    
-    
-    # line capacities (upper and lower bounds)
-    source_weight = 5
-    sink_weight = -100
-    #bus_weight = 0
-    line_resistance = 1
-    lp = lpsolve('make_lp', 0, len(edges)+num_source_sink+len(nodes))
-    objfn = np.zeros(len(edges)+num_source_sink+len(nodes))
-    upbounds = np.zeros(len(edges)+num_source_sink+len(nodes))
-    lobounds = np.zeros(len(edges)+num_source_sink+len(nodes))
-    j = len(edges)
+        line_power_vars[iu,j] = 1
+        line_power_vars[iv,j] = -1
+        line_power_upbounds[j] = cap
+        line_power_lobounds[j] = -cap
+        
+        cap_increase_pos_vars[iu,j] = cap_increase
+        cap_increase_pos_vars[iv,j] = -cap_increase
+        cap_increase_pos_objfn[j] = cap_increase_cost
+        cap_increase_pos_upbounds[j] = Infinite
+        cap_increase_pos_lobounds[j] = 0
+
+        cap_increase_neg_vars[iu,j] = -cap_increase
+        cap_increase_neg_vars[iv,j] = cap_increase
+        cap_increase_neg_objfn[j] = cap_increase_cost
+        cap_increase_neg_upbounds[j] = Infinite
+        cap_increase_neg_lobounds[j] = 0
+    # set cap increase vars to type int
+    cap_increase_stop = cap_increase_start + len(cap_increase_pos_objfn) + len(cap_increase_neg_objfn)
+    for i in range(cap_increase_start+1, cap_increase_stop+1): # + 1 because vars are stored starting at 1
+        lpsolve('set_int', lp, i, True)
+
+    # source/sink (i should really just hold the list of nodes when i initially searched for this stuff)
+    j = 0
     for name,data in nodes:
         i = node_index[name]
         load = data['load']
         if load > 0:
-            con_matrix[i,j] = -1
-            upbounds[j] = load
-            lobounds[j] = 0
-            objfn[j] = source_weight
-            edge_index[(None,name)] = j
+            source_sink_vars[i,j] = -1
+            source_sink_objfn[j] = source_cost
+            source_sink_upbounds[j] = load
+            source_sink_lobounds[j] = 0
             j += 1
         elif load < 0:
-            con_matrix[i,j] = 1
-            upbounds[j] = -load
-            lobounds[j] = 0
-            objfn[j] = sink_weight
-            edge_index[(name, None)] = j
+            source_sink_vars[i,j] = 1
+            source_sink_objfn[j] = sink_cost
+            source_sink_upbounds[j] = -load
+            source_sink_lobounds[j] = 0
             j += 1
-    # set up power angle constraints
-    pow_angle_offset = j
+
+    # power angles
     i = len(nodes)
+    print pow_angle_vars.shape
+    print "edge len:", len(edges)
+    print edge_index
+    print node_index
     for u,v,d in edges:
-        ju = node_index[u] + pow_angle_offset
-        jv = node_index[v] + pow_angle_offset
+        ju = node_index[u]
+        jv = node_index[v]
         je = edge_index[(u,v)]
-        con_matrix[i,ju] = 1
-        con_matrix[i,jv] = -1
-        con_matrix[i,je] = -line_resistance
+        print ju,jv,je
+        pow_angle_vars[i,ju] = 1
+        pow_angle_vars[i,jv] = -1
+        line_power_vars[i,je] = -line_resistance
+        cap_increase_pos_vars[i,je] = -line_resistance
+        cap_increase_neg_vars[i,je] = line_resistance
         i += 1
-    # set bounds to be line capacities
-    for u,v,d in edges:
-        i = edge_index[(u,v)]
-        cap = d['capacity']
-        upbounds[i] = cap
-        lobounds[i] = -cap
-    for i in range(len(edges)+num_source_sink,len(upbounds)):
-        upbounds[i] = Infinite
-        lobounds[i] = -Infinite
+    for i in range(len(pow_angle_upbounds)):
+        pow_angle_upbounds[i] = Infinite
+        pow_angle_lobounds[i] = -Infinite
       
     # node constraints
     for name,data in nodes:
@@ -184,22 +264,29 @@ def solve_network_flow(graph):
     lpsolve('set_obj_fn', lp, objfn)
     lpsolve('set_upbo', lp, upbounds)
     lpsolve('set_lowbo', lp, lobounds)
-    lpsolve('set_outputfile', lp, "")
+    lpsolve('set_outputfile', lp, "lp.txt")
     lpsolve('print_lp',lp)
     result = lpsolve('solve',lp)
 
     solution = lpsolve('get_variables', lp)[0]
     print "solution:", solution
+
+    line_cap_increase = solution[cap_increase_start:len(cap_increase_pos_objfn)]
+    line_cap_increase += solution[cap_increase_start+len(cap_increase_pos_objfn):cap_increase_stop]
+    for i in range(len(line_cap_increase)):
+        line_cap_increase[i] *= cap_increase
+
     for u,v,d in edges:
         i = edge_index[(u,v)]
         d['load'] = solution[i]
+        d['load'] += solution[cap_increase_start + i] # pos going additional capacity
+        d['load'] -= solution[cap_increase_start+len(cap_increase_pos_objfn) + i] # neg going add cap
         #if len(edges) > 1:
         #    d['load'] = solution[i]
         #else:
         #    d['load'] = solution
     #lpsolve('delete_lp',lp)
-    return lp
-
+    return (lp, line_cap_increase)
 
 # checks: theta_i - theta_j = x_ij * p_ij
 # for all power angles theta, resistance x, and power p
@@ -226,9 +313,11 @@ def test_feasibility(graph):
             feasible = False
         print u, '==>', v, dot_prod[i], b[i] 
     return feasible
+
 if __name__ == "__main__":
     graph = init_graph()
-    lp = solve_network_flow(graph)
+    lp,cap_increase = solve_network_flow(graph)
+    print "cap increase:", cap_increase
     feasible = test_feasibility(graph)
     if feasible:
         print "Solution Feasible"
