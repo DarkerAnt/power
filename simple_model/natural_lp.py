@@ -19,10 +19,19 @@ line_resistance = 1 # i bet i can fix this by throwing it into a capacity form i
 
 class LPVars:
     def __init__(self):
+        self.start = 0
+        self.end = 0
         self.vars = None
         self.objfn = None
         self.upbounds = None
         self.lobounds = None
+    def set(self, start, stop, con_matrix, objfn, upbounds, lobounds):
+        self.start = start
+        self.end = stop
+        self.vars = con_matrix[:,start:stop]
+        self.objfn = objfn[start:stop]
+        self.upbounds = upbounds[start:stop]
+        self.lobounds = lobounds[start:stop]
 
 class LPCont:
     def __init__(self):
@@ -40,6 +49,149 @@ class LPCont:
         self.sink_nodes = []
         self.node_index = {}
         self.edge_index = {}
+
+    def update_edge_power(self, graph):
+        global cap_increase
+        solution = lpsolve('get_variables', self.lp)[0]
+        start = self.line_power.start
+        stop = self.line_power.end
+        line_pow = solution[start:stop]
+        start = self.pos_cap_increase.start
+        stop = self.pos_cap_increase.end
+        pos_cap = solution[start:stop]
+        start = self.neg_cap_increase.start
+        stop = self.neg_cap_increase.end
+        neg_cap = solution[start:stop]
+        
+        edges = graph.edges(data=True)
+        for u,v,d in edges:
+            i = self.edge_index[(u,v)]
+            d['load'] = line_pow[i] + (pos_cap[i] - neg_cap[i]) * cap_increase
+
+    def transfer_cap_increase(self, graph):
+        global cap_increase
+        solution = lpsolve('get_variables', self.lp)[0]
+        start = self.pos_cap_increase.start
+        stop = self.pos_cap_increase.end
+        pos_cap = solution[start:stop]
+        start = self.neg_cap_increase.start
+        stop = self.neg_cap_increase.end
+        neg_cap = solution[start:stop]
+
+        edges = graph.edges(data=True)
+        for u,v,d in edges:
+            i = self.edge_index[(u,v)]
+            cap = d['capacity'] + (pos_cap[i] + neg_cap[i]) * cap_increase
+            d['capacity'] = cap
+            self.line_power.upbounds[i] = cap
+            self.line_power.lobounds[i] = -cap
+            # this doesn't actually work, maybe use guess basis?
+            pos_cap[i] = 0
+            neg_cap[i] = 0
+        lpsolve('set_upbo', self.lp, self.upbounds)
+        lpsolve('set_lowbo', self.lp, self.lobounds)
+        
+    def update_node_power(self, graph):
+        node_power = self.get_net_node_power()
+        for name in graph.node:
+            i = self.node_index[name]
+            graph.node[name]['power'] = node_power[i]
+
+        node_throughput = self.get_node_throughput(graph)
+        print "update node throughput:", node_throughput
+        for name in self.source_nodes:
+            i = self.node_index[name]
+            graph.node[name]['throughput'] = node_throughput[i]
+        for name in self.sink_nodes:
+            i = self.node_index[name]
+            graph.node[name]['throughput'] = node_throughput[i]
+
+    def get_line_cap_increase(self):
+        global cap_increase
+        if self.lp == None:
+            print "ERROR: LP not initialized"
+            return -1
+        solution = lpsolve('get_variables', self.lp)[0]
+        start = self.pos_cap_increase.start
+        stop = self.pos_cap_increase.end
+        line_cap_increase = np.copy(solution[start:stop])
+        start = self.neg_cap_increase.start
+        stop = self.neg_cap_increase.end
+        line_cap_increase += solution[start:stop]
+        return line_cap_increase*cap_increase
+    
+    def get_line_power(self):
+        if self.lp == None:
+            print "ERROR: LP not initialized"
+            return -1
+        solution = lpsolve('get_variables', self.lp)[0]
+        start = self.line_power.start
+        stop = self.line_power.end
+        return np.copy(solution[start:stop]) + self.get_line_cap_increase()
+    
+    # uses injecting and consuming edges to find node power
+    # used to get final power unit placement
+    def get_net_node_power(self):
+        if self.lp == None:
+            print "ERROR: LP not initialized"
+            return -1
+        solution = lpsolve('get_variables', self.lp)[0]
+        node_power = np.zeros(len(self.node_index))
+        start = self.source_sink.start
+        stop = self.source_sink.end
+        net_power = solution[start:stop]
+        j = 0
+        for name in self.source_nodes:
+            i = self.node_index[name]
+            node_power[i] = net_power[j]
+            j += 1
+        for name in self.sink_nodes:
+            i = self.node_index[name]
+            node_power[i] = net_power[j]
+            j += 1
+        return node_power
+    
+    # uses edge direction to determine power through nodes
+    # used to find power routed through nodes
+    def get_node_throughput(self, graph):
+        global cap_increase
+        solution = lpsolve('get_variables', self.lp)[0]
+        start = self.line_power.start
+        stop = self.line_power.end
+        line_pow = solution[start:stop]
+        start = self.pos_cap_increase.start
+        stop = self.pos_cap_increase.end
+        pos_cap_pow = solution[start:stop]
+        start = self.neg_cap_increase.start
+        stop = self.neg_cap_increase.end
+        neg_cap_pow = solution[start:stop]
+        start = self.source_sink.start
+        stop = self.source_sink.end
+        gen_power = solution[start:stop]
+                
+        edges = graph.edges()
+        node_power = np.zeros(len(edges))
+        for u,v in edges:
+            iu = self.node_index[u]
+            iv = self.node_index[v]
+            j = self.edge_index[(u,v)]
+            power = line_pow[j] + cap_increase * (pos_cap_pow[j] - neg_cap_pow[j])
+            if power >= 0:
+                node_power[iv] += power
+            else:
+                node_power[iu] -= power
+
+        j = 0
+        for name in self.source_nodes:
+            i = self.node_index[name]
+            node_power[i] += gen_power[j]
+            j += 1
+        return node_power
+
+    def update(self, graph):
+        self.update_edge_power(graph)
+        self.transfer_cap_increase(graph)
+        self.update_node_power(graph)
 
 def display_graph(graph, edge_width=2):
     nodes = graph.nodes(data=True)
@@ -86,7 +238,7 @@ def init_graph():
     
     graph.node['A']['load'] = -10
     graph.node['B']['load'] = 75
-    graph.node['C']['load'] = 35
+    graph.node['C']['load'] = 40#35
     graph.node['D']['load'] = 0
     graph.node['E']['load'] = 0
     graph.node['F']['load'] = -50
@@ -121,6 +273,9 @@ def init_graph():
     #graph.edge['2']['3']['capacity'] = 25
     #graph.edge['2']['4']['capacity'] = 10
 
+    for u,d in nodes:
+        d['power'] = 0
+        d['throughput'] = 0
     for u,v,d in edges:
         d['load'] = 0
     
@@ -144,7 +299,6 @@ def init_graph():
     return graph
 
 
-
 def build_lp(graph):
     global source_cost, sink_cost, cap_increase_cost, cap_increase, line_resistance
     nodes = graph.nodes(data=True)
@@ -158,7 +312,7 @@ def build_lp(graph):
         load = data['load']
         if load > 0:
             lpc.source_nodes.append(name)
-        elif load < 0:
+        else:
             lpc.sink_nodes.append(name)
 
     # con_matrix format: con_matrix[node, var]
@@ -186,39 +340,24 @@ def build_lp(graph):
     lpc.lobounds = lobounds
     
     start = 0
-    stop = len(edges) 
-    lpc.line_power.vars = con_matrix[:,start:stop]
-    lpc.line_power.objfn = objfn[start:stop]
-    lpc.line_power.upbounds = upbounds[start:stop]
-    lpc.line_power.lobounds = lobounds[start:stop]
+    stop = len(edges)
+    lpc.line_power.set(start, stop, con_matrix, objfn, upbounds, lobounds)
 
     start = stop
     stop = start + len(lpc.source_nodes) + len(lpc.sink_nodes)
-    lpc.source_sink.vars = con_matrix[:,start:stop]
-    lpc.source_sink.objfn = objfn[start:stop]
-    lpc.source_sink.upbounds = upbounds[start:stop]
-    lpc.source_sink.lobounds = lobounds[start:stop]
-
-    start = stop
-    stop = start + len(edges)
-    lpc.pos_cap_increase.vars = con_matrix[:,start:stop]
-    lpc.pos_cap_increase.objfn = objfn[start:stop]
-    lpc.pos_cap_increase.upbounds = upbounds[start:stop]
-    lpc.pos_cap_increase.lobounds = lobounds[start:stop]
+    lpc.source_sink.set(start, stop, con_matrix, objfn, upbounds, lobounds)
     
     start = stop
     stop = start + len(edges)
-    lpc.neg_cap_increase.vars = con_matrix[:,start:stop]
-    lpc.neg_cap_increase.objfn = objfn[start:stop]
-    lpc.neg_cap_increase.upbounds = upbounds[start:stop]
-    lpc.neg_cap_increase.lobounds = lobounds[start:stop]
-
+    lpc.pos_cap_increase.set(start, stop, con_matrix, objfn, upbounds, lobounds)
+        
+    start = stop
+    stop = start + len(edges)
+    lpc.neg_cap_increase.set(start, stop, con_matrix, objfn, upbounds, lobounds)
+    
     start = stop
     stop = start + len(nodes)
-    lpc.pow_angle.vars = con_matrix[:,start:stop]
-    lpc.pow_angle.objfn = objfn[start:stop]
-    lpc.pow_angle.upbounds = upbounds[start:stop]
-    lpc.pow_angle.lobounds = lobounds[start:stop]
+    lpc.pow_angle.set(start, stop, con_matrix, objfn, upbounds, lobounds)
     
     # line_power and cap_increase
     for u,v,d in edges:
@@ -248,6 +387,7 @@ def build_lp(graph):
         for i in range(cap_increase_start+1, cap_increase_stop+1): # + 1 because vars are stored starting at 1
             lpsolve('set_int', lp, i, True)
 
+    # this j nonsense scares me
     # source/sink
     j = 0
     for name in lpc.source_nodes:
@@ -266,23 +406,6 @@ def build_lp(graph):
         lpc.source_sink.upbounds[j] = -load
         lpc.source_sink.lobounds[j] = 0
         j += 1
-
-    #for j in range(len(lpc.source_nodes) + len(lpc.sink_nodes)):
-    #    name = source_sink_nodes[j]
-    #    i = lpc.node_index[name]
-    #    load = graph.node[name]['load']
-    #    if load > 0: # source
-    #        lpc.source_sink.vars[i,j] = -1
-    #        lpc.source_sink.objfn[j] = source_cost
-    #        lpc.source_sink.upbounds[j] = load
-    #        lpc.source_sink.lobounds[j] = 0
-    #        lpc.source_nodes.append(name)
-    #    else: # sink
-    #        lpc.source_sink.vars[i,j] = 1
-    #        lpc.source_sink.objfn[j] = sink_cost
-    #        lpc.source_sink.upbounds[j] = -load
-    #        lpc.source_sink.lobounds[j] = 0
-    #        lpc.sink_nodes.append(name)
 
     # power angles
     i = len(nodes)
@@ -324,7 +447,6 @@ def build_lp(graph):
 
 def solve_network_flow(graph, lpc = None):
     global cap_increase
-    
 
     if lpc == None:
         lpc = build_lp(graph)
@@ -333,55 +455,10 @@ def solve_network_flow(graph, lpc = None):
     lpsolve('set_outputfile', lp, "lp.txt")
     lpsolve('print_lp',lp)
     result = lpsolve('solve',lp)
-
     solution = lpsolve('get_variables', lp)[0]
-    #print "solution:", solution
-    
-    cap_start = len(lpc.edge_index)  + len(lpc.source_nodes) + len(lpc.sink_nodes) + 1
-    if lpsolve('get_upbo', lp, cap_start) == Infinite:
-        build_capacity = True
-    else:
-        build_capacity = False
-
-    if build_capacity:
-        line_cap_increase = solution[cap_increase_start:cap_increase_start+len(lpc.edge_index)]
-        line_cap_increase += solution[cap_increase_start+len(lpc.edge_index):cap_increase_start+2*len(lpc.edge_index)]
-        for i in range(len(line_cap_increase)):
-            line_cap_increase[i] *= cap_increase
-    else:
-        line_cap_increase = np.zeros(len(solution))
-    
-    for u,v,d in graph.edges(data=True):
-        i = lpc.edge_index[(u,v)]
-        d['load'] = solution[i]
-        if build_capacity:
-            d['load'] += solution[cap_increase_start + i] * cap_increase  # pos going additional capacity
-            d['load'] -= solution[cap_increase_start+len(lpc.edge_index) + i] * cap_increase # neg going add cap
-        #if len(edges) > 1:
-        #    d['load'] = solution[i]
-        #else:
-        #    d['load'] = solution
-    #lpsolve('delete_lp',lp)
-
-    # get net power at all nodes
-    node_power = np.zeros(len(lpc.node_index))
-    j = 0
-    for name in lpc.source_nodes:
-        i = lpc.node_index[name]
-        node_power[i] = solution[len(lpc.edge_index) + j]
-        j += 1
-    for name in lpc.sink_nodes:
-        i = lpc.node_index[name]
-        node_power[i] = solution[len(lpc.edge_index) + j]
-        j += 1
-
-    #node_power = np.zeros(len(lpc.node_index))
-    #for j in range(len(source_sink_nodes)):
-    #    name = source_sink_nodes[j]
-    #    i = lpc.node_index[name]
-    #    power = solution[len(lpc.edge_index) + j]
-    #    node_power[i] = power
-
+    #print "solution:", solution                             
+    line_cap_increase = lpc.get_line_cap_increase()
+    node_power = lpc.get_net_node_power()
     return (node_power, line_cap_increase)
 
 def toggle_capacity_expansion(lpc, enable):
@@ -411,7 +488,7 @@ def test_feasibility(graph, lpc):
         a[i,ju] = 1
         a[i,jv] = -1
         b[i] = d['load']
-    
+    print a,b
     x = np.linalg.lstsq(a,b)
     feasible = True
     dot_prod = np.dot(a,x[0])
@@ -422,30 +499,74 @@ def test_feasibility(graph, lpc):
         #print u, '==>', v, dot_prod[i], b[i] 
     return feasible
 
-def get_delta_power(graph, net_node_power):
-    nodes = graph.nodes(data=True)
-    delta_power = np.zeros(len(nodes))
+#def get_delta_power(graph, node_power):
+#    nodes = graph.nodes(data=True)
+#    delta_power = np.zeros(len(nodes))
+#    total_load_shed = 0
+#    total_excess_power = 0
+#    for i in range(len(nodes)):
+#        name,data = nodes[i]
+#        load = data['power']
+#        print load
+#        if load < 0:
+#            delta_power[i] = load + node_power[i]
+#            total_load_shed += delta_power[i]
+#        else:
+#            delta_power[i] = load - node_power[i]
+#            total_excess_power += delta_power[i]
+#    return (delta_power, total_load_shed, total_excess_power)
+
+def get_delta_power(graph, lpc):
+    node_power = lpc.get_net_node_power()
+    print node_power
+    delta_power = np.zeros(len(graph.node))
     total_load_shed = 0
     total_excess_power = 0
-    for i in range(len(nodes)):
-        name,data = nodes[i]
-        load = data['load']
-        if load < 0:
-            delta_power[i] = load + net_node_power[i]
-            total_load_shed += delta_power[i]
+
+    for name in graph.node:
+        i = lpc.node_index[name]
+        delta_power[i] = node_power[i] - graph.node[name]['power']
+        load = graph.node[name]['load']
+        if load <= 0:
+            total_load_shed -= load + node_power[i]
         else:
-            delta_power[i] = load - net_node_power[i]
-            total_excess_power += delta_power[i]
+            print "excess:", name, load, '-', node_power[i]
+            total_excess_power += load - node_power[i]
+        
     return (delta_power, total_load_shed, total_excess_power)
 
-def increase_load(graph, num_nodes, total_increase, lpc=None):
+def get_delta_throughput(graph, lpc):
+    throughput = lpc.get_node_throughput(graph)
+    delta_throughput = np.zeros(len(graph.node))
+    for name in graph.node:
+        i = lpc.node_index[name]
+        delta_throughput[i] = throughput[i] - graph.node[name]['throughput']
+    return delta_throughput
+
+def sync_graph_to_lpc(graph, lpc):
+    line_cap_increase = lpc.get_line_cap_increase()
+    for u,v,d in graph.edges(data=True):
+        i = lpc.edge_index[(u,v)]
+        d['capacity'] += cap_increase[i]
+
+def increase_gens(num_nodes, total_increase, graph, lpc):
+    gen_increase = total_increase / num_nodes
+    selected_nodes = random.sample(lpc.source_nodes, num_nodes)
+    for name in selected_nodes:
+        graph.node[name]['load'] += gen_increase
+        i = lpc.node_index[name]
+        lpc.source_sink.upbounds[i] += gen_increase
+    lpsolve('set_upbo', lpc.lp, lpc.upbounds)
+
+def increase_load(num_nodes, total_increase, graph, lpc):
     load_increase = total_increase / num_nodes
-    selected_nodes = random.sample(graph.node, num_nodes)
+    selected_nodes = random.sample(lpc.sink_nodes, num_nodes)
     for name in selected_nodes:
         graph.node[name]['load'] -= load_increase
-        if lpc != None:
-            i = node_index[name]
-            lpc.source_sink.upbounds[i] -= load_increase
+        i = lpc.node_index[name]
+        lpc.source_sink.upbounds[i] += load_increase
+    lpsolve('set_upbo', lpc.lp, lpc.upbounds)
+        
 
 def find_optimal_weight(graph):
     global source_cost, sink_cost, cap_increase_cost, cap_increase, line_resistance
@@ -502,33 +623,125 @@ def speed_test():
             lpsolve('delete_lp', lpc.lp)
         
 
-def test_load_volatility():
-    n = 100
-    num_increase = 5
-    total_increase = 40
-    graph = nx.random_graphs.powerlaw_cluster_graph(n, 3, 0.1)
-    lpc = build_lp(graph)
-    for i in range(100):
-        node_power,cap_increase = solve_network_flow(graph,lp)
-        increase_load(graph, num_increase, total_increase,lpc)
+def remove_edges(names, lpc):
+    for name in names:
+        i = lpc.edge_index[name]
+        lpc.line_power.upbounds[i] = 0
+        lpc.line_power.lobounds[i] = 0
+    lpsolve('set_upbo', lpc.lp, lpc.upbounds)
+    lpsolve('set_lowbo', lpc.lp, lpc.lobounds)
 
-if __name__ == "__main__":
-    #speed_test()
-    graph = init_graph()
+def restore_edges(names, graph, lpc):
+    for name in names:
+        i = lpc.edge_index[name]
+        u,v = name
+        cap = graph.edge[u][v]['capacity']
+        lpc.line_power.upbounds[i] = cap
+        lpc.line_power.lobounds[i] = -cap
+    lpsolve('set_upbo', lpc.lp, lpc.upbounds)
+    lpsolve('set_lowbo', lpc.lp, lpc.lobounds)
     
-    #find_optimal_weight(graph)
+def test_load_volatility():
+    fout = open("load_volatility_run.txt", 'w')
+    num_nodes = 80
+    num_increase = 5
+    #total_increase = 5
+    orig_graph = nx.random_graphs.powerlaw_cluster_graph(num_nodes, 3, 0.1)
+    nodes = orig_graph.nodes()
+    for name in nodes:
+        orig_graph.node[name]['load'] = -10
+    gens = random.sample(nodes, 5)
+    for name in gens:
+        orig_graph.node[name]['load'] = 200
+    edges = orig_graph.edges(data=True)
+    for u,v,d in edges:
+        d['capacity'] = 20
+        d['load'] = 0
+    #display_graph(graph)
+    for total_increase in range(5,35,5):
+        print "Starting run:", total_increase
+        fout.write(str(total_increase))
+        graph = orig_graph.copy()
+        lpc = build_lp(graph)
+    # initially solve an easy LP and then tighten the bounds via increased demand
+        for i in range(20):
+            node_power,cap_increase = solve_network_flow(graph,lpc)
+            print "time elapsed:", lpsolve('time_elapsed', lpc.lp), "cap increase:", np.sum(cap_increase)
+            #fout.write(", "+ str(np.sum(cap_increase)))
+            delta_power,load_shed,excess_power = get_delta_power(graph, node_power)
+            fout.write(", " + str(sum(delta_power)))
+            lpc.update(graph)
+            increase_load(num_increase, total_increase, graph, lpc)
+
+    # start expanding the gens
+        for i in range(100):
+            node_power,cap_increase = solve_network_flow(graph,lpc)
+            print "time elapsed:", lpsolve('time_elapsed', lpc.lp), "cap increase:", np.sum(cap_increase)
+            #fout.write(", " + str(np.sum(cap_increase)))
+            delta_power,load_shed,excess_power = get_delta_power(graph, node_power)
+            fout.write(", " + str(sum(delta_power)))
+            lpc.update(graph)
+            increase_load(num_increase, total_increase, graph, lpc)
+            for name in gens:
+                graph.node[name]['load'] += total_increase/len(gens)
+        fout.write('\n')
+
+def normal_test():
+    graph = init_graph()
     lpc = build_lp(graph)
     #toggle_capacity_expansion(lpc, enable=False)
     node_power,cap_increase = solve_network_flow(graph, lpc)
-    print "cap increase:", cap_increase
-    print "net node power:", node_power
+    #print "cap increase:", cap_increase
+    print "node power:", node_power
+    delta_power,load_shed,excess_power = get_delta_power(graph,lpc)
+    print "delta power:", delta_power
+    lpc.update(graph)
     feasible = test_feasibility(graph,lpc)
     if feasible:
         print "Solution Feasible"
     else:
         print "Solution Infeasible"
-    delta_power,load_shed,excess_power = get_delta_power(graph, node_power)
-    print "Delta Power:", delta_power
-    print "Load Shed:", load_shed
-    print "Excess Power:", excess_power
+    
+    #print "Delta Power:", delta_power
+    #print "Load Shed:", load_shed
+    #print "Excess Power:", excess_power
+    print lpc.node_index
     display_graph(graph)
+    return graph,lpc
+
+def extended_normal_test():
+    num_increase = 1
+    total_increase = 7.5
+    graph,lpc = normal_test()
+    gens = lpc.source_nodes
+    for i in range(6):
+        node_power,cap_increase = solve_network_flow(graph,lpc)
+        print "node_power", node_power
+        #print "time elapsed:", lpsolve('time_elapsed', lpc.lp), "cap increase:", np.sum(cap_increase)
+        delta_power,load_shed,excess_power = get_delta_power(graph, lpc)
+        print "delta power:", delta_power
+        print "load shed:", load_shed
+        print "excess power:", excess_power
+        lpc.update(graph)
+        display_graph(graph)
+        increase_load(num_increase, total_increase, graph, lpc)
+
+    # start expanding the gens
+    print "Now expanding generators"
+    for i in range(1):
+        node_power,cap_increase = solve_network_flow(graph,lpc)
+        #print "time elapsed:", lpsolve('time_elapsed', lpc.lp), "cap increase:", np.sum(cap_increase)
+        #fout.write(", " + str(np.sum(cap_increase)))
+        delta_power,load_shed,excess_power = get_delta_power(graph, lpc)
+        print "delta power:", delta_power
+        lpc.update(graph)
+        increase_load(num_increase, total_increase, graph, lpc)
+        increase_gens(len(lpc.source_nodes), total_increase, graph, lpc)
+    
+if __name__ == "__main__":
+    #speed_test()
+    #test_load_volatility()
+    #normal_test()
+    extended_normal_test()
+
+    

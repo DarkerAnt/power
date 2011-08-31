@@ -114,3 +114,10 @@ $P_{km}$ is the dc current through $x_{km}$ \\
 A wonderful set of pictures with the $\pi-$model next to the DC power flow model here.
 
 For more information cite relevant paper I stole the derivation and chunks of text from.
+
+\section{Formulating DC Power Flow as a Linear Program}
+Create a graph (nodes == buses, edges == power lines)
+Create virtual edges to source generating nodes and sink demand nodes
+Set sum(power entering - power leaving) == 0
+Set the upper and lower bounds of the edge variables to their respective line capacities.
+Create pos & neg extra capacity variables for each edge variable. The extra capacity variables have (-Infinity, Infinity) bounds, but has a high cost associated with it, representing the cost of expanding line capacity.
